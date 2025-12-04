@@ -4,11 +4,13 @@ import { ValidationPipe } from '@nestjs/common';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import express from 'express';
 import { ExpressAdapter } from '@nestjs/platform-express';
+import { INestApplication } from '@nestjs/common';
 
-const server = express(); // Use 'server' to align with NestJS examples for adapter
+let cachedApp: INestApplication; // Cache the app instance for cold starts
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
+async function bootstrapServer(): Promise<INestApplication> {
+  const expressApp = express(); // Create an Express instance
+  const app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp));
 
   // Enable CORS
   app.enableCors();
@@ -21,9 +23,15 @@ async function bootstrap() {
   app.useGlobalGuards(new JwtAuthGuard(reflector));
 
   await app.init(); // Initialize NestJS modules
-  // No app.listen() here
+  return app;
 }
-bootstrap(); // Call bootstrap to initialize the app
 
-// Export the underlying Express server instance
-export default server;
+// This is the Vercel serverless function handler
+export default async function (req, res) {
+  if (!cachedApp) {
+    cachedApp = await bootstrapServer();
+  }
+  // Use the underlying httpAdapter to process the request
+  // This ensures NestJS's routing takes over
+  return cachedApp.getHttpAdapter().getInstance()(req, res);
+}
