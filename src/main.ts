@@ -2,7 +2,7 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
-import express from 'express';
+import express, { Request, Response } from 'express';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { INestApplication } from '@nestjs/common';
 
@@ -27,7 +27,7 @@ async function bootstrapServer(): Promise<INestApplication> {
 }
 
 // This is the Vercel serverless function handler
-export default async function (req, res) {
+export default async function (req: Request, res: Response) {
   if (!cachedApp) {
     cachedApp = await bootstrapServer();
   }
