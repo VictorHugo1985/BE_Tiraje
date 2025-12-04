@@ -2,9 +2,13 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import * as express from 'express';
+import { ExpressAdapter } from '@nestjs/platform-express';
+
+const server = express(); // Use 'server' to align with NestJS examples for adapter
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
 
   // Enable CORS
   app.enableCors();
@@ -16,6 +20,10 @@ async function bootstrap() {
   const reflector = app.get(Reflector);
   app.useGlobalGuards(new JwtAuthGuard(reflector));
 
-  await app.listen(3000);
+  await app.init(); // Initialize NestJS modules
+  // No app.listen() here
 }
-bootstrap();
+bootstrap(); // Call bootstrap to initialize the app
+
+// Export the underlying Express server instance
+export default server;
