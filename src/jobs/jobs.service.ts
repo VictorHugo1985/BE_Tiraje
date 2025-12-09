@@ -27,7 +27,18 @@ export class JobsService {
     };
     createdJob.timeline.push(creationEvent);
     try {
-      return await createdJob.save();
+      // If priority is not provided, set it to max + 1 for the target press
+      if (createdJob.priority === undefined || createdJob.priority === null) {
+        const maxPriorityJob = await this.jobModel.findOne({ press: createdJob.press, status: 'en cola' })
+          .sort({ priority: -1 })
+          .select('priority')
+          .exec();
+        createdJob.priority = (maxPriorityJob?.priority || 0) + 1;
+      }
+      
+      const savedJob = await createdJob.save(); // Save the job
+      await this._reassignQueuePriorities([savedJob.press]); // Reassign priorities for the affected press
+      return savedJob;
     } catch (error) {
       if (error.code === 11000) { // MongoDB duplicate key error
         throw new BadRequestException(`OT '${createJobDto.ot}' already exists.`);
@@ -56,7 +67,11 @@ export class JobsService {
     if (!job) throw new NotFoundException(`Job with ID "${id}" not found`);
 
     const oldJobObject = job.toObject(); // Estado antes del cambio
+    const oldStatus = oldJobObject.status;
+    const oldPress = oldJobObject.press;
+    // const oldPriority = oldJobObject.priority; // No longer needed for this logic
 
+    console.log(`[JobsService] update method - Incoming updateJobDto for job ${id}:`, updateJobDto);
     // Aplicar cambios
     Object.assign(job, updateJobDto);
 
@@ -86,6 +101,24 @@ export class JobsService {
     
     this._calculateMetrics(job);
     const updatedJob = await job.save();
+
+    // Determine which presses need priority re-assignment
+    const pressesToReassign: string[] = [];
+
+    // Case 1: Press changed
+    if (updateJobDto.press && updateJobDto.press !== oldPress) {
+        pressesToReassign.push(oldPress); // Reassign old press
+        pressesToReassign.push(updatedJob.press); // Reassign new press
+    } else if (updateJobDto.priority !== undefined && updateJobDto.priority !== oldJobObject.priority) {
+        // Case 2: Priority changed within the same press
+        // Ensure that a priority change within the same press also triggers a re-assignment
+        pressesToReassign.push(updatedJob.press);
+    }
+    
+    if (pressesToReassign.length > 0) {
+      await this._reassignQueuePriorities(pressesToReassign);
+    }
+
     return this.findOne(updatedJob._id.toString()); // Re-fetch para obtener el populado
   }
 
@@ -110,6 +143,8 @@ export class JobsService {
   async remove(id: string): Promise<Job> {
     const deletedJob = await this.jobModel.findByIdAndDelete(id).exec();
     if (!deletedJob) throw new NotFoundException(`Job with ID "${id}" not found`);
+    // Reassign priorities in the press from which the job was removed.
+    await this._reassignQueuePriorities([deletedJob.press]);
     return deletedJob;
   }
   
@@ -164,7 +199,41 @@ export class JobsService {
     job.pauseCount = pauseCount;
     job.setupCount = setupCount;
   }
-  
-  // Este método ya no es necesario, lo elimino para mantener el código limpio
-  // async findAllWithFinished(show: boolean): Promise<Job[]> { ... }
+
+  /**
+   * Reassigns priorities for jobs that are in the 'en cola' (queued) status.
+   * If 'presses' are provided, it reassigns priorities only for those specific presses.
+   * Otherwise, it reassigns for all presses that have queued jobs.
+   * Jobs are sorted by their current priority to maintain manual ordering.
+   * The priorities are then updated sequentially starting from 1.
+   */
+  private async _reassignQueuePriorities(presses?: string[]): Promise<void> {
+    let pressesToProcess: string[] = [];
+
+    if (presses && presses.length > 0) {
+      pressesToProcess = Array.from(new Set(presses)); // Ensure unique presses
+    } else {
+      // Find all unique presses that have jobs in 'en cola' status
+      const distinctPresses = await this.jobModel.distinct('press', { status: 'en cola' }).exec();
+      pressesToProcess = distinctPresses;
+    }
+
+    for (const press of pressesToProcess) {
+      const queuedJobs = await this.jobModel.find({ status: 'en cola', press: press })
+        .sort({ priority: 1 }) // Sort only by existing priority to maintain manual order
+        .exec();
+
+      let currentPriority = 1;
+      const bulkOperations = queuedJobs.map(job => ({
+        updateOne: {
+          filter: { _id: job._id },
+          update: { $set: { priority: currentPriority++ } }
+        }
+      }));
+
+      if (bulkOperations.length > 0) {
+        await this.jobModel.bulkWrite(bulkOperations);
+      }
+    }
+  }
 }

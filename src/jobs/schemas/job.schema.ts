@@ -71,7 +71,7 @@ export class Job {
   @Prop()
   press: string;
 
-  @Prop()
+  @Prop({ default: 1 })
   priority: number;
 
   // New fields for operator data and calculated metrics
