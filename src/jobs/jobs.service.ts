@@ -24,7 +24,7 @@ export class JobsService {
     });
     // Opcional: registrar quién creó el trabajo
     const creationEvent: TimelineEvent = {
-      userId: user.userId,
+      userId: user.userId as any, // Cast to any to satisfy mongoose ref type
       timestamp: new Date(),
       type: 'creation',
       details: { message: `Trabajo creado por ${user.name}` },
@@ -96,7 +96,7 @@ export class JobsService {
 
     if (Object.keys(changes).length > 0) {
       const editEvent: TimelineEvent = {
-        userId: user.userId,
+        userId: user.userId as any, // Cast to any to satisfy mongoose ref type
         timestamp: new Date(),
         type: 'edit',
         details: {
@@ -135,7 +135,7 @@ export class JobsService {
     if (!job) throw new NotFoundException(`Job with ID "${jobId}" not found`);
 
     const newEvent: TimelineEvent = {
-      userId: user.userId,
+      userId: user.userId as any, // Cast to any to satisfy mongoose ref type
       timestamp: new Date(eventDto.timestamp),
       type: eventDto.type,
       details: eventDto.details,
