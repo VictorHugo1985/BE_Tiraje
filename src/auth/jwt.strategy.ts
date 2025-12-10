@@ -10,8 +10,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET'), // Get secret from ConfigService
+      secretOrKey: configService.get<string>('JWT_SECRET') || 'fallbackSecretForLocalDevShouldBeChanged', // Provide a fallback or throw error
     });
+
+    if (!configService.get<string>('JWT_SECRET')) {
+        throw new Error('JWT_SECRET environment variable is not set. Please set it for proper JWT authentication.');
+    }
   }
 
   async validate(payload: any) {
