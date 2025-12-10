@@ -4,7 +4,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import express, { Request, Response } from 'express';
 import { INestApplication } from '@nestjs/common';
-import { ExpressAdapter } from '@nestjs/platform-express'; // Import ExpressAdapter
+import { ExpressAdapter } from '@nestjs/platform-express';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 // Define bootstrap function that can be used for both local and serverless
 async function bootstrap(): Promise<INestApplication> {
@@ -17,9 +18,8 @@ async function bootstrap(): Promise<INestApplication> {
   // Use class-validator for all incoming requests
   app.useGlobalPipes(new ValidationPipe());
 
-  // Apply JwtAuthGuard globally
-  const reflector = app.get(Reflector);
-  app.useGlobalGuards(new JwtAuthGuard(reflector));
+  // Apply the custom exception filter globally
+  app.useGlobalFilters(new HttpExceptionFilter());
 
   await app.init(); // Initialize NestJS modules
   return app;

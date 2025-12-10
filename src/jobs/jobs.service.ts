@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { CreateTimelineEventDto } from './dto/create-timeline-event.dto';
 import { Job, JobDocument, TimelineEvent } from './schemas/job.schema';
+import { UserPayload } from '../common/interfaces/user-payload.interface';
 
 // Helper para poblar los datos del usuario en el timeline
 const populateUser = {
@@ -16,8 +17,11 @@ const populateUser = {
 export class JobsService {
   constructor(@InjectModel(Job.name) private jobModel: Model<JobDocument>) {}
 
-  async create(createJobDto: CreateJobDto, user: any): Promise<Job> {
-    const createdJob = new this.jobModel(createJobDto);
+  async create(createJobDto: CreateJobDto, user: UserPayload): Promise<Job> {
+    const createdJob = new this.jobModel({
+      ...createJobDto,
+      createdBy: user.userId,
+    });
     // Opcional: registrar quién creó el trabajo
     const creationEvent: TimelineEvent = {
       userId: user.userId,
@@ -62,9 +66,13 @@ export class JobsService {
     return job;
   }
 
-  async update(id: string, updateJobDto: UpdateJobDto, user: any): Promise<Job> {
+  async update(id: string, updateJobDto: UpdateJobDto, user: UserPayload): Promise<Job> {
     const job = await this.jobModel.findById(id).exec();
     if (!job) throw new NotFoundException(`Job with ID "${id}" not found`);
+
+    if (job.createdBy && job.createdBy.toString() !== user.userId) {
+      throw new UnauthorizedException('You are not authorized to update this job');
+    }
 
     const oldJobObject = job.toObject(); // Estado antes del cambio
     const oldStatus = oldJobObject.status;
@@ -122,7 +130,7 @@ export class JobsService {
     return this.findOne(updatedJob._id.toString()); // Re-fetch para obtener el populado
   }
 
-  async addTimelineEvent(jobId: string, eventDto: CreateTimelineEventDto, user: any): Promise<Job> {
+  async addTimelineEvent(jobId: string, eventDto: CreateTimelineEventDto, user: UserPayload): Promise<Job> {
     const job = await this.jobModel.findById(jobId).exec();
     if (!job) throw new NotFoundException(`Job with ID "${jobId}" not found`);
 
@@ -140,9 +148,18 @@ export class JobsService {
     return this.findOne(updatedJob._id.toString()); // Re-fetch para obtener el populado
   }
 
-  async remove(id: string): Promise<Job> {
+  async remove(id: string, user: UserPayload): Promise<Job> {
+    const job = await this.jobModel.findById(id).exec();
+    if (!job) throw new NotFoundException(`Job with ID "${id}" not found`);
+
+    if (job.createdBy && job.createdBy.toString() !== user.userId) {
+      throw new UnauthorizedException('You are not authorized to delete this job');
+    }
+
     const deletedJob = await this.jobModel.findByIdAndDelete(id).exec();
-    if (!deletedJob) throw new NotFoundException(`Job with ID "${id}" not found`);
+    if (!deletedJob) {
+      throw new NotFoundException(`Job with ID "${id}" not found`);
+    }
     // Reassign priorities in the press from which the job was removed.
     await this._reassignQueuePriorities([deletedJob.press]);
     return deletedJob;
