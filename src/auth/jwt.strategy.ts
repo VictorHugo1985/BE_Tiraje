@@ -7,15 +7,17 @@ import { ConfigService } from '@nestjs/config'; // Import ConfigService
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private configService: ConfigService) { // Inject ConfigService
+    const secret = configService.get<string>('JWT_SECRET');
+
+    if (!secret) {
+        throw new Error('JWT_SECRET environment variable is not set. Please set it for proper JWT authentication.');
+    }
+
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET') || 'fallbackSecretForLocalDevShouldBeChanged', // Provide a fallback or throw error
+      secretOrKey: secret,
     });
-
-    if (!configService.get<string>('JWT_SECRET')) {
-        throw new Error('JWT_SECRET environment variable is not set. Please set it for proper JWT authentication.');
-    }
   }
 
   async validate(payload: any) {
