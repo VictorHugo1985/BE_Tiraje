@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
 import { PauseCausesService } from './pause-causes.service';
 import { CreatePauseCauseDto } from './dto/create-pause-cause.dto';
 import { UpdatePauseCauseDto } from './dto/update-pause-cause.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('pause-causes')
+@UseGuards(JwtAuthGuard)
 export class PauseCausesController {
   constructor(private readonly pauseCausesService: PauseCausesService) {}
 

@@ -92,6 +92,9 @@ export class Job {
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false })
   startedByUserId?: User;
+
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true })
+  createdBy: User;
 }
 
 export const JobSchema = SchemaFactory.createForClass(Job);
